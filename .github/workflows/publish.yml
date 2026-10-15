@@ -1,31 +1,52 @@
+# Nome do workflow, exibido na aba "Actions" do GitHub.
 name: publish
 
+# "on" define o gatilho: QUANDO este workflow roda.
 on:
   push:
     tags:
+      # Roda sempre que uma tag for enviada (push) para o repositório.
+      # "*" = qualquer tag (ex.: 1.0.0). É o que dispara a publicação do parent.
       - "*"
 
+# "jobs" lista os trabalhos. Cada job roda numa máquina virtual isolada.
 jobs:
   publish:
+    # A VM efêmera onde o job roda (fornecida pelo GitHub, descartada ao fim).
     runs-on: ubuntu-latest
+
+    # Permissões do token automático (GITHUB_TOKEN) para este job.
+    # Por padrão o token é mínimo; aqui pedimos escrita em packages
+    # porque vamos PUBLICAR no GitHub Packages.
     permissions:
-      contents: read
-      packages: write
+      contents: read     # ler o código do repositório
+      packages: write    # publicar o artefato Maven no GitHub Packages
+
+    # "steps" são os passos executados em ordem, na mesma VM.
     steps:
+      # Baixa o código do repositório para dentro da VM.
+      # "uses" chama uma action pronta publicada por terceiros.
       - uses: actions/checkout@v4
 
+      # Instala o JDK 25 e já configura o Maven para autenticar no servidor
+      # "github" (o repositório de artefatos) usando variáveis de ambiente.
       - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: temurin        # fornecedor do JDK (Eclipse Temurin)
           java-version: "25"
-          cache: maven
-          server-id: github
-          server-username: MAVEN_USERNAME
-          server-password: MAVEN_PASSWORD
+          cache: maven                  # guarda o ~/.m2 entre execuções (mais rápido)
+          server-id: github             # id do <server> que o Maven vai usar
+          server-username: MAVEN_USERNAME  # de qual env var ler o usuário
+          server-password: MAVEN_PASSWORD  # de qual env var ler a senha/token
 
+      # Compila e publica o artefato no GitHub Packages (mvn deploy usa o
+      # <distributionManagement> do pom.xml).
       - name: Publish to GitHub Packages
-        run: mvn -B deploy
+        run: mvn -B deploy              # -B = batch mode (não interativo, para CI)
         env:
+          # github.actor = quem disparou o workflow (seu usuário).
           MAVEN_USERNAME: ${{ github.actor }}
+          # GITHUB_TOKEN = token temporário que o GitHub cria por execução,
+          # com as permissões declaradas acima. Não precisa criar nada manual.
           MAVEN_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
